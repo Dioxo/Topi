@@ -85,7 +85,7 @@ router.get('/current', async (req, res) => {
     try {
         const name = (await readFile(`${process.env.TORGUARD_FILES}/Topi_current`, 'utf8')).replace('TorGuard.', '').replace('.ovpn', '');
         if (process.env.ENV === 'prod') {
-            exec('sudo systemctl restart openvpn');
+            exec('sudo systemctl restart openvpn@server.service');
         }
         res.status(200).send({ name });
     } catch (error) {
