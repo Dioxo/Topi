@@ -8,6 +8,7 @@ import _debug from 'debug';
 import http from 'http';
 const debug = _debug('back:server');
 import { app } from '../app.js';
+import 'dotenv/config';
 
 /**
  * Get port from environment and store in Express.
