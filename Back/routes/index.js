@@ -24,7 +24,7 @@ router.get('/countries', async (_, res) => {
             const countryOrIp = t.replace('TorGuard.', '').replace('.ovpn', '');
             const icon = countryCodes.get(countryOrIp.toUpperCase()) || countryCodes.get(countryOrIp.split('.')[0].toUpperCase());
             flagsCache.push({
-                name: countryOrIp,
+                name: countryOrIp.toUpperCase(),
                 // get code from pattern COUNTRY or COUNTRY.CITY, Otherwise null if IP
                 icon: icon ? `https://flagcdn.com/${icon.toLowerCase()}.svg` : undefined,
             });
@@ -91,5 +91,25 @@ router.get('/current', async (req, res) => {
         res.status(200).send({ name });
     } catch (error) {
         res.status(400).send({ error });
+    }
+});
+
+/**
+ * @openapi
+ * /restart:
+ *   get:
+ *     description: restart openvpn
+ *     responses:
+ *       200:
+ *         description: success
+ */
+router.get('/restart', async (_, res) => {
+    try {
+        if (process.env.ENV === 'prod') {
+            exec('sudo systemctl restart openvpn@server.service');
+        }
+        res.status(200).send();
+    } catch (error) {
+        res.status(400).send();
     }
 });
