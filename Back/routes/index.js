@@ -22,10 +22,11 @@ router.get('/countries', async (_, res) => {
         torguardFiles.map((t) => {
             // torguard file has the scheme TorGuard.COUNTRY.CITY or TorGuard.IP
             const countryOrIp = t.replace('TorGuard.', '').replace('.ovpn', '');
+            const icon = countryCodes.get(countryOrIp.toUpperCase()) || countryCodes.get(countryOrIp.split('.')[0].toUpperCase());
             flagsCache.push({
                 name: countryOrIp,
                 // get code from pattern COUNTRY or COUNTRY.CITY, Otherwise null if IP
-                icon: countryCodes.get(countryOrIp.toUpperCase()) || countryCodes.get(countryOrIp.split('.')[0].toUpperCase()),
+                icon: icon ? `https://flagcdn.com/${icon.toLowerCase()}.svg` : undefined,
             });
         });
     }
