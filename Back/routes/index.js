@@ -7,13 +7,39 @@ import { exec } from 'child_process';
 let flagsCache = [];
 
 /**
+ * @swagger
+ * definitions:
+ *   Flag:
+ *     required:
+ *       - name
+ *     properties:
+ *       name:
+ *         type: string
+ *       icon:
+ *         type: string
+ */
+
+/**
+ * @swagger
+ * tags:
+ *   name: Topi
+ */
+
+/**
  * @openapi
  * /countries:
  *   get:
  *     description: get all available countries
+ *     tags: [Topi]
+ *     produces:
+ *       - application/json
  *     responses:
  *       200:
  *         description: success
+ *         schema:
+ *           type: array
+ *           items:
+ *             $ref: '#/definitions/Flag'
  */
 router.get('/countries', async (_, res) => {
     if (flagsCache.length === 0) {
@@ -24,7 +50,7 @@ router.get('/countries', async (_, res) => {
             const countryOrIp = t.replace('TorGuard.', '').replace('.ovpn', '');
             const icon = countryCodes.get(countryOrIp.toUpperCase()) || countryCodes.get(countryOrIp.split('.')[0].toUpperCase());
             flagsCache.push({
-                name: countryOrIp.toUpperCase(),
+                name: countryOrIp,
                 // get code from pattern COUNTRY or COUNTRY.CITY, Otherwise null if IP
                 icon: icon ? `https://flagcdn.com/${icon.toLowerCase()}.svg` : undefined,
             });
@@ -38,6 +64,7 @@ router.get('/countries', async (_, res) => {
  * /country:
  *   post:
  *     description: change vpn country
+ *     tags: [Topi]
  *     parameters:
  *         - name: current
  *           in: query
@@ -46,6 +73,8 @@ router.get('/countries', async (_, res) => {
  *     responses:
  *       200:
  *         description: success
+ *       400:
+ *         description: bar request
  */
 router.post('/country', async (req, res) => {
     if (!req.query.current || flagsCache.length === 0 || !flagsCache.some((f) => f.name === req.query.current)) {
@@ -64,6 +93,7 @@ router.post('/country', async (req, res) => {
  * /countries:
  *   delete:
  *     description: change vpn country
+ *     tags: [Topi]
  *     responses:
  *       200:
  *         description: success
@@ -78,9 +108,15 @@ router.delete('/countries', (_, res) => {
  * /current:
  *   get:
  *     description: get selected country for vpn
+ *     tags: [Topi]
  *     responses:
  *       200:
  *         description: success
+ *         schema:
+ *           type: object
+ *           $ref: '#/definitions/Flag'
+ *       400:
+ *         description: bar request
  */
 router.get('/current', async (req, res) => {
     try {
@@ -88,8 +124,13 @@ router.get('/current', async (req, res) => {
         if (process.env.ENV === 'prod') {
             exec('sudo systemctl restart openvpn@server.service');
         }
-        res.status(200).send({ name });
+        const icon = countryCodes.get(name.toUpperCase()) || countryCodes.get(name.split('.')[0].toUpperCase());
+        res.status(200).json({
+            name,
+            icon: icon ? `https://flagcdn.com/${icon.toLowerCase()}.svg` : undefined,
+        });
     } catch (error) {
+        console.error(error);
         res.status(400).send({ error });
     }
 });
@@ -99,9 +140,12 @@ router.get('/current', async (req, res) => {
  * /restart:
  *   get:
  *     description: restart openvpn
+ *     tags: [Topi]
  *     responses:
  *       200:
  *         description: success
+ *       400:
+ *         description: bar request
  */
 router.get('/restart', async (_, res) => {
     try {

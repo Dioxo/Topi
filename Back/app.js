@@ -8,8 +8,16 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+import cors from 'cors';
 
 export const app = express();
+
+var corsOptions = {
+    origin: 'http://localhost:3000',
+    optionsSuccessStatus: 200, // some legacy browsers (IE11, various SmartTVs) choke on 204
+};
+
+app.use(cors(corsOptions));
 app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -18,7 +26,6 @@ app.use('/', indexRouter);
 
 const options = {
     definition: {
-        openapi: '3.0.0',
         info: {
             title: 'Topi Swagger',
             version: '1.0.0',
@@ -27,4 +34,8 @@ const options = {
     apis: ['./routes/*.js'], // files containing annotations as above
 };
 const swaggerSpec = swaggerJsdoc(options);
+app.get('/api-docs/swagger.json', (req, res) => {
+    console.log(swaggerSpec);
+    res.json(swaggerSpec);
+});
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
