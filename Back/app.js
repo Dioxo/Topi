@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import express from 'express';
 import path from 'path';
 import logger from 'morgan';
@@ -32,9 +33,10 @@ const options = {
         },
     },
     apis: ['./routes/*.js'], // files containing annotations as above
+    explorer: true,
 };
 const swaggerSpec = swaggerJsdoc(options);
-app.get('/api-docs/swagger.json', (req, res) => {
+app.get('/api-docs/swagger.json', (_, res) => {
     console.log(swaggerSpec);
     res.json(swaggerSpec);
 });

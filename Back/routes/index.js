@@ -1,10 +1,53 @@
 import express from 'express';
 export const router = express.Router();
-import { readdir, writeFile, copyFile, readFile } from 'node:fs/promises';
+import { writeFile, copyFile, readFile } from 'node:fs/promises';
+import { readdir } from 'node:fs';
 import countryCodes from '../public/country-code.js';
 import { exec } from 'child_process';
 
-let flagsCache = [];
+let locationsCache = [];
+
+router.use((_, __, next) => {
+    if(locationsCache.length === 0) {
+        console.log("test");
+        readdir(process.env.TORGUARD_FILES, null, (error, filesNames ) => {
+            if(error != null){
+                throw new Error(error);
+            }
+            const torguardFiles = filesNames.filter((fileName) => /TorGuard.*/.test(fileName));
+
+            locationsCache = torguardFiles.map((t) => {
+                // torguard file has the scheme TorGuard.COUNTRY.CITY or TorGuard.IP
+                const countryOrIp = t.replace('TorGuard.', '').replace('.ovpn', '');
+                const icon = countryCodes.get(countryOrIp.toUpperCase()) || countryCodes.get(countryOrIp.split('.')[0].toUpperCase());
+
+                return ({
+                    name: countryOrIp,
+                    // get code from pattern COUNTRY or COUNTRY.CITY, Otherwise undefined if IP
+                    icon: icon ? `https://flagcdn.com/${icon.toLowerCase()}.svg` : undefined,
+                });
+            });
+
+            next();
+        });
+    }else{
+        next();
+    }
+})
+
+const reloadOpenVpn = () => {
+    if (process.env.ENV === 'prod') {
+        exec('sudo systemctl restart openvpn@server.service');
+        return new Promise((resolve) => {
+            setTimeout(() => resolve(), 5000)
+        });
+    }
+
+    //return Promise.resolve();
+    return new Promise((resolve) => {
+        setTimeout(() => resolve(), 5000)
+    });
+}
 
 /**
  * @swagger
@@ -42,21 +85,7 @@ let flagsCache = [];
  *             $ref: '#/definitions/Flag'
  */
 router.get('/countries', async (_, res) => {
-    if (flagsCache.length === 0) {
-        const filesNames = await readdir(process.env.TORGUARD_FILES);
-        const torguardFiles = filesNames.filter((fileName) => /TorGuard.*/.test(fileName));
-        torguardFiles.map((t) => {
-            // torguard file has the scheme TorGuard.COUNTRY.CITY or TorGuard.IP
-            const countryOrIp = t.replace('TorGuard.', '').replace('.ovpn', '');
-            const icon = countryCodes.get(countryOrIp.toUpperCase()) || countryCodes.get(countryOrIp.split('.')[0].toUpperCase());
-            flagsCache.push({
-                name: countryOrIp,
-                // get code from pattern COUNTRY or COUNTRY.CITY, Otherwise null if IP
-                icon: icon ? `https://flagcdn.com/${icon.toLowerCase()}.svg` : undefined,
-            });
-        });
-    }
-    res.status(200).json(flagsCache);
+    res.status(200).json(locationsCache);
 });
 
 /**
@@ -77,29 +106,33 @@ router.get('/countries', async (_, res) => {
  *         description: bar request
  */
 router.post('/country', async (req, res) => {
-    if (!req.query.current || flagsCache.length === 0 || !flagsCache.some((f) => f.name === req.query.current)) {
+
+    if (!req.query.current || !locationsCache.some((f) => f.name === req.query.current)) {
         res.status(400).send();
     } else {
         // file to save the current vpn config name
-        await writeFile(`${process.env.TORGUARD_FILES}/Topi_current`, `TorGuard.${req.query.current}.ovpn`);
+        await writeFile(`${process.env.TORGUARD_FILES}/Topi_current`, req.query.current);
         // copy this file to be used as the current ovpn file
+        // ovpn takes the file with .conf as default
         await copyFile(`${process.env.TORGUARD_FILES}/TorGuard.${req.query.current}.ovpn`, `${process.env.TORGUARD_FILES}/server.conf`);
+
+        await reloadOpenVpn();
         res.status(200).send();
     }
 });
 
 /**
  * @openapi
- * /countries:
+ * /cache:
  *   delete:
- *     description: change vpn country
+ *     description: clean cache
  *     tags: [Topi]
  *     responses:
  *       200:
  *         description: success
  */
-router.delete('/countries', (_, res) => {
-    flagsCache = [];
+router.delete('/cache', (_, res) => {
+    locationsCache = [];
     res.status(200).send();
 });
 
@@ -109,6 +142,8 @@ router.delete('/countries', (_, res) => {
  *   get:
  *     description: get selected country for vpn
  *     tags: [Topi]
+ *     produces:
+ *       - application/json
  *     responses:
  *       200:
  *         description: success
@@ -118,17 +153,10 @@ router.delete('/countries', (_, res) => {
  *       400:
  *         description: bar request
  */
-router.get('/current', async (req, res) => {
+router.get('/current', async (_, res) => {
     try {
-        const name = (await readFile(`${process.env.TORGUARD_FILES}/Topi_current`, 'utf8')).replace('TorGuard.', '').replace('.ovpn', '');
-        if (process.env.ENV === 'prod') {
-            exec('sudo systemctl restart openvpn@server.service');
-        }
-        const icon = countryCodes.get(name.toUpperCase()) || countryCodes.get(name.split('.')[0].toUpperCase());
-        res.status(200).json({
-            name,
-            icon: icon ? `https://flagcdn.com/${icon.toLowerCase()}.svg` : undefined,
-        });
+        const name = (await readFile(`${process.env.TORGUARD_FILES}/Topi_current`, 'utf8'));
+        res.status(200).json(locationsCache.find(a => a.name === name));
     } catch (error) {
         console.error(error);
         res.status(400).send({ error });
@@ -137,7 +165,7 @@ router.get('/current', async (req, res) => {
 
 /**
  * @openapi
- * /restart:
+ * /restart-ovpn:
  *   get:
  *     description: restart openvpn
  *     tags: [Topi]
@@ -147,11 +175,9 @@ router.get('/current', async (req, res) => {
  *       400:
  *         description: bar request
  */
-router.get('/restart', async (_, res) => {
+router.get('/restart-ovpn', async (_, res) => {
     try {
-        if (process.env.ENV === 'prod') {
-            exec('sudo systemctl restart openvpn@server.service');
-        }
+        await reloadOpenVpn();
         res.status(200).send();
     } catch (error) {
         res.status(400).send();
